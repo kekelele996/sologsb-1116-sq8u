@@ -1,0 +1,79 @@
+:root {
+  --gb-ink: #2b3a2f;
+  --gb-accent: #c96f3a;
+  --gb-moss: #3f7a4d;
+  --gb-bg: #f7f5f0;
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+body {
+  font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif;
+  background: var(--gb-bg);
+  color: var(--gb-ink);
+}
+.page {
+  padding: 20px 24px 40px;
+}
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.page-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+.page-sub {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #6f7d72;
+  line-height: 1.6;
+}
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  background: #fff;
+  border: 1px solid #e8e2d6;
+  border-radius: 12px;
+}
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+.muted {
+  color: #7f8d82;
+  font-size: 12px;
+}
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.warn-strip {
+  margin: 0 0 14px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: #fdf3e7;
+  border: 1px solid #f0d3ae;
+  color: #8a5a1f;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.section-title {
+  margin: 22px 0 12px;
+  font-size: 16px;
+  font-weight: 600;
+}
