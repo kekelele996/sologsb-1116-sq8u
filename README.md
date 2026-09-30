@@ -59,13 +59,13 @@ sologsb-1116/
 │   ├── nginx.conf              # try_files 前端路由回落 + gzip
 │   ├── public/favicon.svg
 │   └── src/
-│       ├── types/              # record.ts / spore.ts / point.ts / identify.ts / index.ts
-│       ├── stores/             # recordStore / sporeStore / pointStore / identifyStore（Zustand）
+│       ├── types/              # record.ts / spore.ts / point.ts / identify.ts / batch.ts / index.ts
+│       ├── stores/             # recordStore / sporeStore / pointStore / identifyStore / mergeStore（Zustand）
 │       ├── components/common/  # SporePrintSwatch / TraitsSummary / GillAttachmentTag / GeoPointForm
 │       ├── hooks/              # usePersistentStore / useCandidateMatch
-│       ├── pages/              # AtlasPage / RecordDetailPage / PointsPage / IdentifyPage / ComparePage
+│       ├── pages/              # AtlasPage / RecordDetailPage / PointsPage / IdentifyPage / ComparePage / MergePage
 │       ├── router/index.ts
-│       └── utils/              # spore.ts / export.ts / id.ts
+│       └── utils/              # spore.ts / merge.ts / export.ts / id.ts
 ```
 
 ## 五、数据模型与存储
@@ -77,8 +77,9 @@ sologsb-1116/
 | CollectPoint 采集点 | 地点名、经纬度、海拔、植被类型、基物、伴生树种、日期、采集人 | `points` |
 | IdentifyLog 鉴定结论 | 结论学名、依据、参考图鉴与页码、置信度、是否待复核、复核人 | `identifies` |
 
-- 数据库名 `gbfungiguide`，`meta` 表保存 `schemaVersion`；
-- `version(2)` 升级迁移会为历史条目补齐「菌肉变色反应」默认值（不变色）；
+- 数据库名 `gbfungiguide`，`meta` 表保存 `schemaVersion`（外业批次信封以 `batch:<batchId>` 为键存为 JSON 字符串）；
+- `version(2)` 升级迁移为历史条目补齐「菌肉变色反应」默认值（不变色）；
+- `version(3)` 新增 `batches`（批次审计）与 `conflicts`（冲突快照）两张表，并为历史数据补齐溯源字段 `originBatchId`；迁移只增字段、不删行，**孢子印记录随升级完整保留**；
 - 数据仅存于浏览器本地，容器无状态、不挂载命名卷。
 
 ## 六、主要页面
@@ -90,6 +91,17 @@ sologsb-1116/
 | `/points` | 采集点管理：经纬度格式校验、条目数与主要基物统计、删除前校验下级条目 |
 | `/identify` | 鉴定工作页：左侧勾选形态特征与印色，右侧实时给出候选名录排序，确认后落鉴定结论 |
 | `/compare` | 条目对比：并排最多 3 条，逐项对照菌盖/菌褶菌管/孢子印差异并高亮 |
+| `/merge` | 外业批次合并：导出当前批次 / 导入外业批次，冲突逐条比对确认后事务提交，附批次历史 |
+
+## 六点五、外业批次合并
+
+平板离线登记的批次回到驻地后，在「批次合并」页导入批次 JSON：
+
+- **字段级归属**：同一采集编号两边都动过时，形态（菌盖/菌肉/菌褶菌管/菌柄等）与孢子印按外业版本；采集点与鉴定留痕按图谱库版本。
+- **两版都留着逐条认**：冲突不会直接覆盖，外业版与图谱库版快照并列展示，默认「采用外业形态与孢子印」，也可逐条改选「保留图谱库形态与孢子印」或丢弃。
+- 新增条目直接带入；编号一致且内容相同的自动跳过。
+- **失败回滚 + 幂等重试**：提交在单个 Dexie 读写事务内落地，中途失败整体回滚到本地上一版；同一批次重复提交按采集编号匹配，不产生重复条目。
+- 合并落地后各 store 重新 hydrate，着生方式等改动会触发候选排序自动重算。
 
 ## 七、候选排序规则
 

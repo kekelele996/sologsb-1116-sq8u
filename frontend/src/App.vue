@@ -6,6 +6,7 @@ import { recordStore } from '@/stores/recordStore'
 import { sporeStore } from '@/stores/sporeStore'
 import { pointStore } from '@/stores/pointStore'
 import { identifyStore } from '@/stores/identifyStore'
+import { mergeStore } from '@/stores/mergeStore'
 
 const route = useRoute()
 const recordState = useStore(recordStore)
@@ -17,7 +18,8 @@ const menus = [
   { path: '/atlas', label: '图谱总览', icon: 'Grid' },
   { path: '/points', label: '采集点管理', icon: 'Location' },
   { path: '/identify', label: '鉴定工作页', icon: 'Search' },
-  { path: '/compare', label: '条目对比', icon: 'Files' }
+  { path: '/compare', label: '条目对比', icon: 'Files' },
+  { path: '/merge', label: '批次合并', icon: 'Sort' }
 ]
 
 const activeMenu = computed(() => menus.find((item) => route.path.startsWith(item.path))?.path ?? '/atlas')
@@ -34,6 +36,7 @@ onMounted(async () => {
   await sporeStore.getState().hydrate()
   await pointStore.getState().hydrate()
   await identifyStore.getState().hydrate()
+  await mergeStore.getState().hydrate()
 })
 </script>
 

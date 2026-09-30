@@ -2,21 +2,35 @@ import { onUnmounted, reactive } from 'vue'
 import type { StoreApi } from 'zustand/vanilla'
 import Dexie, { type Table } from 'dexie'
 import type { CollectPoint, FungusRecord, IdentifyLog, SporePrint } from '@/types'
+import type { BatchAudit, ConflictRow } from '@/types/batch'
 
 /** IndexedDB 数据结构版本号 */
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 export interface MetaRow {
   key: string
-  value: number
+  /** schemaVersion 存数字；外业批次信封存 JSON 字符串（key 以 batch: 开头） */
+  value: number | string
 }
 
-/** Dexie 封装：条目 / 孢子印 / 采集点 / 鉴定结论 四张表 + 元数据表 */
+/** 整库快照（用于合并失败时回滚到本地上一版） */
+export interface FullSnapshot {
+  records: FungusRecord[]
+  spores: SporePrint[]
+  points: CollectPoint[]
+  identifies: IdentifyLog[]
+  batches: BatchAudit[]
+  conflicts: ConflictRow[]
+}
+
+/** Dexie 封装：条目 / 孢子印 / 采集点 / 鉴定结论 + 批次审计 / 冲突 六张业务表 + 元数据表 */
 class FungiGuideDb extends Dexie {
   records!: Table<FungusRecord, string>
   spores!: Table<SporePrint, string>
   points!: Table<CollectPoint, string>
   identifies!: Table<IdentifyLog, string>
+  batches!: Table<BatchAudit, string>
+  conflicts!: Table<ConflictRow, string>
   meta!: Table<MetaRow, string>
 
   constructor() {
@@ -29,7 +43,7 @@ class FungiGuideDb extends Dexie {
       meta: 'key'
     })
     // v2：新增「菌肉变色反应」字段，迁移时为历史条目补齐默认值（不变色）
-    this.version(SCHEMA_VERSION)
+    this.version(2)
       .stores({
         records: 'id, code, pointId, attachment, capShape',
         spores: 'id, recordId, color, observeDate',
@@ -46,6 +60,32 @@ class FungiGuideDb extends Dexie {
               record.fleshReaction = '不变色'
             }
           })
+      })
+    // v3：新增批次审计与冲突表；为历史数据补齐溯源字段 originBatchId。
+    // 迁移只新增字段、绝不删除既有行——孢子印记录随升级完整保留。
+    this.version(SCHEMA_VERSION)
+      .stores({
+        records: 'id, code, pointId, attachment, capShape, originBatchId',
+        spores: 'id, recordId, color, observeDate, originBatchId',
+        points: 'id, name, substrate, vegetation, originBatchId',
+        identifies: 'id, recordId, conclusion, date, originBatchId',
+        batches: '&batchId, status, appliedAt',
+        conflicts: '&id, batchId, code, status',
+        meta: 'key'
+      })
+      .upgrade(async (tx) => {
+        const backfill = async <T extends { originBatchId?: string }>(table: string): Promise<void> => {
+          await tx
+            .table<T, string>(table)
+            .toCollection()
+            .modify((row) => {
+              if (row.originBatchId === undefined) row.originBatchId = ''
+            })
+        }
+        await backfill<FungusRecord>('records')
+        await backfill<SporePrint>('spores')
+        await backfill<CollectPoint>('points')
+        await backfill<IdentifyLog>('identifies')
       })
   }
 }
@@ -70,6 +110,45 @@ export async function syncPut<T extends object>(table: Table<T, string>, row: T)
 /** 删除一条记录 */
 export async function syncDelete<T extends object>(table: Table<T, string>, id: string): Promise<void> {
   await table.delete(id)
+}
+
+/** 读取整库快照（合并前备份，失败时回滚到本地上一版） */
+export async function snapshotAll(): Promise<FullSnapshot> {
+  const [records, spores, points, identifies, batches, conflicts] = await Promise.all([
+    db.records.toArray(),
+    db.spores.toArray(),
+    db.points.toArray(),
+    db.identifies.toArray(),
+    db.batches.toArray(),
+    db.conflicts.toArray()
+  ])
+  return { records, spores, points, identifies, batches, conflicts }
+}
+
+/** 用快照覆盖整库（回滚）。在事务内调用，失败不产生半成品数据。 */
+export async function restoreAll(snapshot: FullSnapshot): Promise<void> {
+  await db.transaction(
+    'rw',
+    [db.records, db.spores, db.points, db.identifies, db.batches, db.conflicts],
+    async () => {
+      await Promise.all([
+        db.records.clear(),
+        db.spores.clear(),
+        db.points.clear(),
+        db.identifies.clear(),
+        db.batches.clear(),
+        db.conflicts.clear()
+      ])
+      await Promise.all([
+        db.records.bulkPut(snapshot.records),
+        db.spores.bulkPut(snapshot.spores),
+        db.points.bulkPut(snapshot.points),
+        db.identifies.bulkPut(snapshot.identifies),
+        db.batches.bulkPut(snapshot.batches),
+        db.conflicts.bulkPut(snapshot.conflicts)
+      ])
+    }
+  )
 }
 
 /** 把 Zustand vanilla store 桥接到 Vue 响应式状态 */

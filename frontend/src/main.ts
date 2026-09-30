@@ -10,6 +10,7 @@ import { recordStore } from '@/stores/recordStore'
 import { sporeStore } from '@/stores/sporeStore'
 import { pointStore } from '@/stores/pointStore'
 import { identifyStore } from '@/stores/identifyStore'
+import { mergeStore } from '@/stores/mergeStore'
 import '@/styles/main.css'
 
 async function bootstrap(): Promise<void> {
@@ -19,6 +20,7 @@ async function bootstrap(): Promise<void> {
   await recordStore.getState().hydrate()
   await sporeStore.getState().hydrate()
   await identifyStore.getState().hydrate()
+  await mergeStore.getState().hydrate()
 }
 
 const app = createApp(App)

@@ -19,4 +19,6 @@ export interface CollectPoint {
   companionTrees: string
   collectDate: string
   collector: string
+  /** 溯源：该采集点来自哪个外业批次（图谱库手工新建为空） */
+  originBatchId?: string
 }

@@ -66,4 +66,6 @@ export interface FungusRecord {
   collector: string
   /** 备注（不可作为食用依据） */
   note: string
+  /** 溯源：该条目来自哪个外业批次（图谱库手工新建为空） */
+  originBatchId?: string
 }

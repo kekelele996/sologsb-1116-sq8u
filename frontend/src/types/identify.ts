@@ -21,4 +21,6 @@ export interface IdentifyLog {
   needReview: boolean
   reviewer: string
   date: string
+  /** 溯源：该鉴定留痕来自哪个外业批次（图谱库手工新建为空） */
+  originBatchId?: string
 }

@@ -14,4 +14,6 @@ export interface SporePrint {
   observeDate: string
   /** 样本干湿度说明 */
   moisture: string
+  /** 溯源：该孢子印来自哪个外业批次 */
+  originBatchId?: string
 }
