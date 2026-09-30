@@ -6,17 +6,20 @@ import { recordStore } from '@/stores/recordStore'
 import { sporeStore } from '@/stores/sporeStore'
 import { pointStore } from '@/stores/pointStore'
 import { identifyStore } from '@/stores/identifyStore'
+import { syncStore } from '@/stores/syncStore'
 
 const route = useRoute()
 const recordState = useStore(recordStore)
 const sporeState = useStore(sporeStore)
 const pointState = useStore(pointStore)
 const identifyState = useStore(identifyStore)
+const syncState = useStore(syncStore)
 
 const menus = [
   { path: '/atlas', label: '图谱总览', icon: 'Grid' },
   { path: '/points', label: '采集点管理', icon: 'Location' },
   { path: '/identify', label: '鉴定工作页', icon: 'Search' },
+  { path: '/sync', label: '外业批次合并', icon: 'Upload' },
   { path: '/compare', label: '条目对比', icon: 'Files' }
 ]
 
@@ -26,7 +29,8 @@ const stats = computed(() => [
   { label: '条目', value: recordState.records.length },
   { label: '孢子印', value: sporeState.spores.length },
   { label: '采集点', value: pointState.points.length },
-  { label: '鉴定留痕', value: identifyState.logs.length }
+  { label: '鉴定留痕', value: identifyState.logs.length },
+  { label: '待认冲突', value: syncState.conflicts.filter((c) => c.status === 'pending').length }
 ])
 
 onMounted(async () => {
@@ -34,6 +38,7 @@ onMounted(async () => {
   await sporeStore.getState().hydrate()
   await pointStore.getState().hydrate()
   await identifyStore.getState().hydrate()
+  await syncStore.getState().hydrate()
 })
 </script>
 

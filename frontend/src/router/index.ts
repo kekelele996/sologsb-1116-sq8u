@@ -27,6 +27,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '鉴定工作页' }
   },
   {
+    path: '/sync',
+    name: 'sync',
+    component: () => import('@/pages/SyncPage.vue'),
+    meta: { title: '外业批次合并' }
+  },
+  {
     path: '/compare',
     name: 'compare',
     component: () => import('@/pages/ComparePage.vue'),

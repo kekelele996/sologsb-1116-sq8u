@@ -1,26 +1,33 @@
 import { onUnmounted, reactive } from 'vue'
 import type { StoreApi } from 'zustand/vanilla'
-import Dexie, { type Table } from 'dexie'
+import Dexie, { type Table, type Transaction } from 'dexie'
 import type { CollectPoint, FungusRecord, IdentifyLog, SporePrint } from '@/types'
+import type { BatchRecord, ConflictRow, FieldBatchPayload, MergeBackup } from '@/types/sync'
 
 /** IndexedDB 数据结构版本号 */
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 export interface MetaRow {
   key: string
   value: number
 }
 
-/** Dexie 封装：条目 / 孢子印 / 采集点 / 鉴定结论 四张表 + 元数据表 */
-class FungiGuideDb extends Dexie {
+/** Dexie 封装：条目 / 孢子印 / 采集点 / 鉴定结论 四张表 + 元数据 + 外业批次合并三表 */
+export class FungiGuideDb extends Dexie {
   records!: Table<FungusRecord, string>
   spores!: Table<SporePrint, string>
   points!: Table<CollectPoint, string>
   identifies!: Table<IdentifyLog, string>
   meta!: Table<MetaRow, string>
+  /** 已导入的外业批次（幂等守卫与重试载荷） */
+  batches!: Table<BatchRecord, string>
+  /** 同号两边都动过的冲突行（两版快照，供逐条认） */
+  conflicts!: Table<ConflictRow, string>
+  /** 每次合并前的本地快照（中途失败回滚到本地上一版） */
+  mergeBackups!: Table<MergeBackup, string>
 
-  constructor() {
-    super('gbfungiguide')
+  constructor(name = 'gbfungiguide') {
+    super(name)
     this.version(1).stores({
       records: 'id, code, pointId, attachment',
       spores: 'id, recordId, color',
@@ -29,7 +36,7 @@ class FungiGuideDb extends Dexie {
       meta: 'key'
     })
     // v2：新增「菌肉变色反应」字段，迁移时为历史条目补齐默认值（不变色）
-    this.version(SCHEMA_VERSION)
+    this.version(2)
       .stores({
         records: 'id, code, pointId, attachment, capShape',
         spores: 'id, recordId, color, observeDate',
@@ -47,6 +54,18 @@ class FungiGuideDb extends Dexie {
             }
           })
       })
+    // v3：外业批次离线合并。仅新增三张表，旧表结构不动，
+    // Dexie 升级保留既有 objectStore，历史孢子印记录原样留存、绝不丢失。
+    this.version(SCHEMA_VERSION).stores({
+      records: 'id, code, pointId, attachment, capShape',
+      spores: 'id, recordId, color, observeDate',
+      points: 'id, name, substrate, vegetation',
+      identifies: 'id, recordId, conclusion, date',
+      meta: 'key',
+      batches: 'batchId, status, importedAt',
+      conflicts: 'id, batchId, code, status',
+      mergeBackups: 'batchId, createdAt'
+    })
   }
 }
 
@@ -70,6 +89,32 @@ export async function syncPut<T extends object>(table: Table<T, string>, row: T)
 /** 删除一条记录 */
 export async function syncDelete<T extends object>(table: Table<T, string>, id: string): Promise<void> {
   await table.delete(id)
+}
+
+/** 读取四张业务表的完整快照（合并前备份用） */
+export async function readLocalSnapshot(): Promise<FieldBatchPayload> {
+  const [points, records, spores, identifies] = await Promise.all([
+    db.points.toArray(),
+    db.records.toArray(),
+    db.spores.toArray(),
+    db.identifies.toArray()
+  ])
+  return { points, records, spores, identifies }
+}
+
+/**
+ * 用快照整体恢复四张业务表（合并中途失败时回滚到本地上一版）。
+ * 与调用方处于同一 Dexie 事务内，保证「恢复」本身也是原子的。
+ */
+export async function restoreSnapshot(tx: Transaction, snapshot: FieldBatchPayload): Promise<void> {
+  await tx.table<CollectPoint, string>('points').clear()
+  await tx.table<FungusRecord, string>('records').clear()
+  await tx.table<SporePrint, string>('spores').clear()
+  await tx.table<IdentifyLog, string>('identifies').clear()
+  await tx.table<CollectPoint, string>('points').bulkPut(snapshot.points)
+  await tx.table<FungusRecord, string>('records').bulkPut(snapshot.records)
+  await tx.table<SporePrint, string>('spores').bulkPut(snapshot.spores)
+  await tx.table<IdentifyLog, string>('identifies').bulkPut(snapshot.identifies)
 }
 
 /** 把 Zustand vanilla store 桥接到 Vue 响应式状态 */
